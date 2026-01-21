@@ -1,0 +1,179 @@
+name: Manual Build Godot No-UID
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Godot Version Tag (e.g., 4.4-stable, 4.3-stable)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      version: ${{ inputs.version }}
+    steps:
+      - name: Check Existing Release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          # Check if we already have a release for this tag
+          if gh release view "$VERSION-nouid" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "Release $VERSION-nouid already exists!"
+            echo "::notice::Release already exists: https://github.com/${{ github.repository }}/releases/tag/$VERSION-nouid"
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          else
+            echo "Release not found. Proceeding to build."
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            platform: linuxbsd
+            arch: x86_64
+            artifact_name: godot.linuxbsd.editor.x86_64
+            
+          - name: Windows
+            os: windows-latest
+            platform: windows
+            arch: x86_64
+            artifact_name: godot.windows.editor.x86_64.exe
+
+          - name: macOS
+            os: macos-latest
+            platform: macos
+            arch: x86_64 # Placeholder for universal logic
+            artifact_name: godot.macos.editor
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout Godot
+        uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot
+          ref: ${{ needs.check-release.outputs.version }}
+
+      - name: Install SCons (Python)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: pip install scons
+
+      - name: Install Linux Dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libx11-dev libxcursor-dev \
+            libxinerama-dev libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev \
+            libudev-dev libxi-dev libxrandr-dev libwayland-dev
+
+      - name: Apply No-UID Patch
+        shell: bash
+        run: |
+          echo "Downloading PR #100973..."
+          curl -L https://github.com/godotengine/godot/pull/100973.diff > no_uid.patch
+          
+          echo "Applying patch..."
+          git apply no_uid.patch
+          
+          echo "Forcing default to FALSE..."
+          if grep -q "editor/resource/generate_uid_files" editor/register_editor_types.cpp; then
+             perl -pi -e 's/GLOBAL_DEF\("editor\/resource\/generate_uid_files", true\)/GLOBAL_DEF("editor\/resource\/generate_uid_files", false)/g' editor/register_editor_types.cpp
+             echo "SUCCESS: Default set to false."
+          else
+             echo "ERROR: Could not find settings line to patch."
+             exit 1
+          fi
+
+      - name: Build Godot Editor
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" == "macos" ]; then
+            echo "Installing Vulkan SDK..."
+            brew install vulkan-loader molten-vk
+
+            echo "Building macOS x86_64..."
+            scons platform=macos target=editor arch=x86_64 production=yes use_lto=yes use_volk=yes
+            mv bin/godot.macos.editor.x86_64 bin/godot_x86_64
+            
+            echo "Building macOS arm64..."
+            scons platform=macos target=editor arch=arm64 production=yes use_lto=yes use_volk=yes
+            mv bin/godot.macos.editor.arm64 bin/godot_arm64
+            
+            echo "Creating Universal Binary..."
+            lipo -create bin/godot_x86_64 bin/godot_arm64 -output bin/godot.universal
+            
+            echo "Bundling .app..."
+            cp -r misc/dist/macos_tools.app bin/Godot.app
+            mkdir -p bin/Godot.app/Contents/MacOS
+            cp bin/godot.universal bin/Godot.app/Contents/MacOS/Godot
+            chmod +x bin/Godot.app/Contents/MacOS/Godot
+          else
+            scons platform=${{ matrix.platform }} target=editor arch=${{ matrix.arch }} production=yes use_lto=yes
+          fi
+
+      - name: Prepare Artifact (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          cd bin
+          zip -r ../godot.macos.editor.zip Godot.app
+
+      - name: Build Artifact Rename (Non-Mac)
+        if: matrix.platform != 'macos'
+        shell: bash
+        run: |
+          VERSION="${{ needs.check-release.outputs.version }}"
+          SRC="bin/${{ matrix.artifact_name }}"
+          
+          if [ "${{ matrix.platform }}" == "windows" ]; then
+            mv "$SRC" "godot-${VERSION}-nouid-${{ matrix.name }}.exe"
+          else
+            mv "$SRC" "godot-${VERSION}-nouid-${{ matrix.name }}"
+            chmod +x "godot-${VERSION}-nouid-${{ matrix.name }}"
+          fi
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-build
+          path: |
+            godot-*
+            godot.macos.editor.zip
+
+  release:
+    needs: [check-release, build]
+    if: needs.check-release.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-build'
+          merge-multiple: true
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.check-release.outputs.version }}-nouid
+          name: Godot ${{ needs.check-release.outputs.version }} (No UID)
+          body: |
+             Manual build of Godot ${{ needs.check-release.outputs.version }} with UID generation disabled by default.
+            
+            Patch applied: https://github.com/godotengine/godot/pull/100973
+          files: |
+            godot-*
+            *.zip
