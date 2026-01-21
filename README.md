@@ -1,3 +1,13 @@
+# 🚫 Godot No-UID Fork
+
+> **This is a custom fork of Godot Engine.**
+>
+> 🛑 **Feature**: This build **disables** the automatic generation of `.uid` files by default.
+> 📦 **Builds**: Check the [Releases Page](../../releases) for pre-compiled binaries of stable versions (Windows, macOS, Linux).
+> 🤖 **Automation**: This fork automatically checks for new Godot stable versions daily, applies [Patch #100973](https://github.com/godotengine/godot/pull/100973), and compiles new binaries.
+
+---
+
 # Godot Engine
 
 <p align="center">
