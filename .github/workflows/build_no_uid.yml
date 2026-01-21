@@ -124,17 +124,22 @@ jobs:
             echo "Building macOS x86_64..."
             # Note: We omit 'use_lto=yes' for speed on the universal build parts to avoid timeouts, 
             # and 'production=yes' usually implies some optimizations.
-            # We also explicitly point to molten-vk if needed, but usually it finds it if installed.
             scons platform=macos target=editor arch=x86_64 production=yes use_lto=yes use_volk=yes
-            mv bin/godot.macos.editor.app/Contents/MacOS/godot.macos.editor bin/godot_x86_64
+            mv bin/godot.macos.editor.x86_64 bin/godot_x86_64
             
             echo "Building macOS arm64..."
             scons platform=macos target=editor arch=arm64 production=yes use_lto=yes use_volk=yes
-            mv bin/godot.macos.editor.app/Contents/MacOS/godot.macos.editor bin/godot_arm64
+            mv bin/godot.macos.editor.arm64 bin/godot_arm64
             
             echo "Creating Universal Binary..."
-            lipo -create bin/godot_x86_64 bin/godot_arm64 -output bin/godot.macos.editor.app/Contents/MacOS/godot.macos.editor
-            chmod +x bin/godot.macos.editor.app/Contents/MacOS/godot.macos.editor
+            lipo -create bin/godot_x86_64 bin/godot_arm64 -output bin/godot.universal
+            
+            echo "Bundling .app..."
+            # Godot source includes a template app bundle in misc/dist
+            cp -r misc/dist/macos_tools.app bin/Godot.app
+            mkdir -p bin/Godot.app/Contents/MacOS
+            cp bin/godot.universal bin/Godot.app/Contents/MacOS/Godot
+            chmod +x bin/Godot.app/Contents/MacOS/Godot
           else
             scons platform=${{ matrix.platform }} target=editor arch=${{ matrix.arch }} production=yes use_lto=yes
           fi
@@ -142,8 +147,8 @@ jobs:
       - name: Prepare Artifact
         if: matrix.platform == 'macos'
         run: |
-          cp -r bin/godot.macos.editor.app .
-          zip -r godot.macos.editor.zip godot.macos.editor.app
+          cd bin
+          zip -r ../godot.macos.editor.zip Godot.app
 
       - name: Build Artifact Rename (Non-Mac)
         if: matrix.platform != 'macos'
