@@ -1,4 +1,4 @@
-# 🚫 Godot No-UID Fork
+# Godot "No UID" Fork
 
 > **This is a custom fork of Godot Engine.**
 >
@@ -7,6 +7,35 @@
 > 🤖 **Automation**: This fork automatically checks for new Godot stable versions daily, applies [Patch #100973](https://github.com/godotengine/godot/pull/100973), and compiles new binaries.
 
 ---
+
+## 🛠 One-Line Clean Script
+
+If you have an existing project with UIDs, you can delete them all in one go using our hosted script.
+
+### Mac / Linux
+```bash
+curl -sL https://raw.githubusercontent.com/rafaismyname/godot-no-uids/master/scripts/clean_uids.sh | bash
+```
+
+### Automation (CI/CD)
+You can include this in your project's CI pipeline to ensure no `.uid` files are ever checked in.
+
+```bash
+wget -O clean_uids.sh https://raw.githubusercontent.com/rafaismyname/godot-no-uids/master/scripts/clean_uids.sh
+chmod +x clean_uids.sh
+./clean_uids.sh .
+```
+
+---
+
+## ❤️ Credits & Thanks
+
+*   **[Godot Engine](https://godotengine.org)**: The amazing engine we all love.
+*   **[Daylily-Zeleen](https://github.com/Daylily-Zeleen)**: For authoring [PR #100973](https://github.com/godotengine/godot/pull/100973) which makes the optional UID system possible.
+
+---
+
+# Godot Engine (Original README)
 
 # Godot Engine
 
