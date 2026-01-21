@@ -1,0 +1,159 @@
+name: Build Godot No-UID
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *' # Check daily
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check Upstream Version
+        id: check
+        run: |
+          # Fetch latest stable tag from Godot
+          LATEST_TAG=$(curl -s https://api.github.com/repos/godotengine/godot/releases/latest | jq -r .tag_name)
+          echo "Latest Upstream Tag: $LATEST_TAG"
+          
+          # Check if we already have a release for this tag
+          HTTP_CODE=$(curl -o /dev/null -s -w "%{http_code}\n" https://api.github.com/repos/${{ github.repository }}/releases/tags/$LATEST_TAG-nouid)
+          
+          if [ "$HTTP_CODE" == "404" ]; then
+            echo "New version detected!"
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "version=$LATEST_TAG" >> $GITHUB_OUTPUT
+            
+            # Create the release draft now so other jobs can upload to it? 
+            # Or just wait until end. We'll wait.
+          else
+            echo "Version $LATEST_TAG-nouid already exists. Skipping."
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "version=$LATEST_TAG" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            platform: linuxbsd
+            arch: x86_64
+            artifact_name: godot.linuxbsd.editor.x86_64
+            
+          - name: Windows
+            os: windows-latest
+            platform: windows
+            arch: x86_64
+            artifact_name: godot.windows.editor.x86_64.exe
+
+          - name: macOS
+            os: macos-latest
+            platform: macos
+            arch: universal
+            artifact_name: godot.macos.editor
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout Godot
+        uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot
+          ref: ${{ needs.check-version.outputs.version }}
+
+      - name: Install SCons (Python)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: pip install scons
+
+      - name: Install Linux Dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libx11-dev libxcursor-dev \
+            libxinerama-dev libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev \
+            libudev-dev libxi-dev libxrandr-dev libwayland-dev
+
+      - name: Apply No-UID Patch
+        shell: bash
+        run: |
+          echo "Downloading PR #100973..."
+          curl -L https://github.com/godotengine/godot/pull/100973.diff > no_uid.patch
+          
+          echo "Applying patch..."
+          git apply no_uid.patch
+          
+          echo "Forcing default to FALSE..."
+          # Target file: editor/register_editor_types.cpp
+          # We check if the patch succeeded first by looking for the new line
+          if grep -q "editor/resource/generate_uid_files" editor/register_editor_types.cpp; then
+             # Use perl for cross-platform inplace editing (Linux/macOS/Windows Git Bash)
+             perl -pi -e 's/GLOBAL_DEF\("editor\/resource\/generate_uid_files", true\)/GLOBAL_DEF("editor\/resource\/generate_uid_files", false)/g' editor/register_editor_types.cpp
+             echo "SUCCESS: Default set to false."
+          else
+             echo "ERROR: Could not find settings line to patch. The PR might have changed."
+             exit 1
+          fi
+
+      - name: Build Godot Editor
+        run: |
+          scons platform=${{ matrix.platform }} target=editor arch=${{ matrix.arch }} production=yes use_lto=yes
+
+      - name: Prepare Artifact
+        if: matrix.platform == 'macos'
+        run: |
+          cp -r bin/godot.macos.editor.app .
+          zip -r godot.macos.editor.zip godot.macos.editor.app
+
+      - name: Build Artifact Rename (Non-Mac)
+        if: matrix.platform != 'macos'
+        shell: bash
+        run: |
+          # Find the binary in bin/ and rename it to a consistent name
+          mv bin/${{ matrix.artifact_name }} godot-${{ needs.check-version.outputs.version }}-nouid-${{ matrix.name }}.exe || mv bin/${{ matrix.artifact_name }} godot-${{ needs.check-version.outputs.version }}-nouid-${{ matrix.name }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-build
+          path: |
+            godot-*
+            godot.macos.editor.zip
+
+  release:
+    needs: [check-version, build]
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-build'
+          merge-multiple: true
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.check-version.outputs.version }}-nouid
+          name: Godot ${{ needs.check-version.outputs.version }} (No UID)
+          body: |
+            Automated build of Godot ${{ needs.check-version.outputs.version }} with UID generation disabled by default.
+            
+            Patch applied: https://github.com/godotengine/godot/pull/100973
+            Default `editor/resource/generate_uid_files` forced to `false`.
+          files: |
+            godot-*
+            *.zip
