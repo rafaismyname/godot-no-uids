@@ -62,7 +62,7 @@ jobs:
           - name: macOS
             os: macos-latest
             platform: macos
-            arch: universal
+            arch: x86_64
             artifact_name: godot.macos.editor
 
     runs-on: ${{ matrix.os }}
