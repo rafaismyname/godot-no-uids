@@ -171,7 +171,7 @@ jobs:
           tag_name: ${{ needs.check-release.outputs.version }}-nouid
           name: Godot ${{ needs.check-release.outputs.version }} (No UID)
           body: |
-             Manual build of Godot ${{ needs.check-release.outputs.version }} with UID generation disabled by default.
+            Manual build of Godot ${{ needs.check-release.outputs.version }} with UID generation disabled by default.
             
             Patch applied: https://github.com/godotengine/godot/pull/100973
           files: |
