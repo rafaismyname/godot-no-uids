@@ -154,8 +154,16 @@ jobs:
         if: matrix.platform != 'macos'
         shell: bash
         run: |
-          # Find the binary in bin/ and rename it to a consistent name
-          mv bin/${{ matrix.artifact_name }} godot-${{ needs.check-version.outputs.version }}-nouid-${{ matrix.name }}.exe || mv bin/${{ matrix.artifact_name }} godot-${{ needs.check-version.outputs.version }}-nouid-${{ matrix.name }}
+          VERSION="${{ needs.check-version.outputs.version }}"
+          SRC="bin/${{ matrix.artifact_name }}"
+          
+          if [ "${{ matrix.platform }}" == "windows" ]; then
+            mv "$SRC" "godot-${VERSION}-nouid-${{ matrix.name }}.exe"
+          else
+            # Linux (keep permission, no .exe)
+            mv "$SRC" "godot-${VERSION}-nouid-${{ matrix.name }}"
+            chmod +x "godot-${VERSION}-nouid-${{ matrix.name }}"
+          fi
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
