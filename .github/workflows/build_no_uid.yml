@@ -62,7 +62,7 @@ jobs:
           - name: macOS
             os: macos-latest
             platform: macos
-            arch: x86_64
+            arch: universal
             artifact_name: godot.macos.editor
 
     runs-on: ${{ matrix.os }}
@@ -111,7 +111,21 @@ jobs:
 
       - name: Build Godot Editor
         run: |
-          scons platform=${{ matrix.platform }} target=editor arch=${{ matrix.arch }} production=yes use_lto=yes
+          if [ "${{ matrix.platform }}" == "macos" ]; then
+            echo "Building macOS x86_64..."
+            scons platform=macos target=editor arch=x86_64 production=yes use_lto=yes
+            mv bin/godot.macos.editor.app/Contents/MacOS/godot.macos.editor bin/godot_x86_64
+            
+            echo "Building macOS arm64..."
+            scons platform=macos target=editor arch=arm64 production=yes use_lto=yes
+            mv bin/godot.macos.editor.app/Contents/MacOS/godot.macos.editor bin/godot_arm64
+            
+            echo "Creating Universal Binary..."
+            lipo -create bin/godot_x86_64 bin/godot_arm64 -output bin/godot.macos.editor.app/Contents/MacOS/godot.macos.editor
+            chmod +x bin/godot.macos.editor.app/Contents/MacOS/godot.macos.editor
+          else
+            scons platform=${{ matrix.platform }} target=editor arch=${{ matrix.arch }} production=yes use_lto=yes
+          fi
 
       - name: Prepare Artifact
         if: matrix.platform == 'macos'
