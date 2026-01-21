@@ -4,7 +4,19 @@
 >
 > 🛑 **Feature**: This build **disables** the automatic generation of `.uid` files by default.
 > 📦 **Builds**: Check the [Releases Page](../../releases) for pre-compiled binaries of stable versions (Windows, macOS, Linux).
+> 🍺 **Homebrew (macOS)**:
+> ```bash
+> brew install --cask rafaismyname/godot-no-uids/godot-no-uids
+> ```
 > 🤖 **Automation**: This fork automatically checks for new Godot stable versions daily, applies [Patch #100973](https://github.com/godotengine/godot/pull/100973), and compiles new binaries.
+>
+> 🧼 **Cleanup**: Run our one-liner to clean existing projects (no download needed):
+>
+> ```bash
+> curl -sL https://raw.githubusercontent.com/rafaismyname/godot-no-uids/master/misc/scripts/clean_uids.sh | bash -s .
+> ```
+>
+> ❤️ **Thanks**: Special thanks to [Daylily-Zeleen](https://github.com/Daylily-Zeleen) for the original PR implementation.
 
 ---
 

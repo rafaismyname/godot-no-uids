@@ -2,6 +2,16 @@ name: Build Godot No-UID
 
 on:
   workflow_dispatch:
+    inputs:
+      godot_version:
+        description: 'Godot Version Tag (e.g. 4.3-stable)'
+        required: false
+        type: string
+      force_rebuild:
+        description: 'Force rebuild if release exists'
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: '0 0 * * *' # Check daily
 
@@ -20,20 +30,25 @@ jobs:
       - name: Check Upstream Version
         id: check
         run: |
-          # Fetch latest stable tag from Godot
-          LATEST_TAG=$(curl -s https://api.github.com/repos/godotengine/godot/releases/latest | jq -r .tag_name)
-          echo "Latest Upstream Tag: $LATEST_TAG"
+          FORCE_REBUILD="${{ inputs.force_rebuild }}"
+          MANUAL_VERSION="${{ inputs.godot_version }}"
+
+          if [ -n "$MANUAL_VERSION" ]; then
+             LATEST_TAG="$MANUAL_VERSION"
+             echo "Manual version selected: $LATEST_TAG"
+          else
+             # Fetch latest stable tag from Godot
+             LATEST_TAG=$(curl -s https://api.github.com/repos/godotengine/godot/releases/latest | jq -r .tag_name)
+             echo "Latest Upstream Tag: $LATEST_TAG"
+          fi
           
           # Check if we already have a release for this tag
           HTTP_CODE=$(curl -o /dev/null -s -w "%{http_code}\n" https://api.github.com/repos/${{ github.repository }}/releases/tags/$LATEST_TAG-nouid)
           
-          if [ "$HTTP_CODE" == "404" ]; then
-            echo "New version detected!"
+          if [ "$HTTP_CODE" == "404" ] || [ "$FORCE_REBUILD" == "true" ]; then
+            echo "New version or forced build detected!"
             echo "should_build=true" >> $GITHUB_OUTPUT
             echo "version=$LATEST_TAG" >> $GITHUB_OUTPUT
-            
-            # Create the release draft now so other jobs can upload to it? 
-            # Or just wait until end. We'll wait.
           else
             echo "Version $LATEST_TAG-nouid already exists. Skipping."
             echo "should_build=false" >> $GITHUB_OUTPUT
@@ -154,8 +169,11 @@ jobs:
         if: matrix.platform != 'macos'
         shell: bash
         run: |
-          # Find the binary in bin/ and rename it to a consistent name
-          mv bin/${{ matrix.artifact_name }} godot-${{ needs.check-version.outputs.version }}-nouid-${{ matrix.name }}.exe || mv bin/${{ matrix.artifact_name }} godot-${{ needs.check-version.outputs.version }}-nouid-${{ matrix.name }}
+          EXT=""
+          if [ "${{ matrix.platform }}" == "windows" ]; then
+            EXT=".exe"
+          fi
+          mv bin/${{ matrix.artifact_name }} godot-${{ needs.check-version.outputs.version }}-nouid-${{ matrix.name }}$EXT
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
