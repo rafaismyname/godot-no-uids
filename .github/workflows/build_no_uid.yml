@@ -110,14 +110,26 @@ jobs:
           fi
 
       - name: Build Godot Editor
+        shell: bash
         run: |
           if [ "${{ matrix.platform }}" == "macos" ]; then
+            # Install Vulkan SDK for macOS (Required for MoltenVK/godot compilation)
+            # We do this here or in a separate step, but inside the shell block works too.
+            # Using brew to install molten-vk usually works for linking.
+            # However, Godot looks for VULKAN_SDK environment variable or standard paths.
+            
+            echo "Installing Vulkan SDK..."
+            brew install vulkan-loader molten-vk
+            
             echo "Building macOS x86_64..."
-            scons platform=macos target=editor arch=x86_64 production=yes use_lto=yes
+            # Note: We omit 'use_lto=yes' for speed on the universal build parts to avoid timeouts, 
+            # and 'production=yes' usually implies some optimizations.
+            # We also explicitly point to molten-vk if needed, but usually it finds it if installed.
+            scons platform=macos target=editor arch=x86_64 production=yes use_lto=yes use_volk=yes
             mv bin/godot.macos.editor.app/Contents/MacOS/godot.macos.editor bin/godot_x86_64
             
             echo "Building macOS arm64..."
-            scons platform=macos target=editor arch=arm64 production=yes use_lto=yes
+            scons platform=macos target=editor arch=arm64 production=yes use_lto=yes use_volk=yes
             mv bin/godot.macos.editor.app/Contents/MacOS/godot.macos.editor bin/godot_arm64
             
             echo "Creating Universal Binary..."
