@@ -8,7 +8,24 @@
 
 ---
 
-## 🛠 One-Line Clean Script
+## � Installation
+
+### macOS (Homebrew)
+
+The easiest way to install on macOS is via Homebrew:
+
+```bash
+brew tap rafaismyname/godot-no-uids
+brew install --cask godot-no-uids
+```
+
+### Manual Download
+
+Download the release for your platform from the [Releases page](../../releases).
+
+---
+
+## �🛠 One-Line Clean Script
 
 If you have an existing project with UIDs, you can delete them all in one go using our hosted script.
 
@@ -34,8 +51,6 @@ chmod +x clean_uids.sh
 *   **[Daylily-Zeleen](https://github.com/Daylily-Zeleen)**: For authoring [PR #100973](https://github.com/godotengine/godot/pull/100973) which makes the optional UID system possible.
 
 ---
-
-# Godot Engine (Original README)
 
 # Godot Engine (Original README)
 
