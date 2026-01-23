@@ -38,10 +38,10 @@ strip_uids() {
 export -f strip_uids
 export STRIPPED
 
-# Find all relevant files: .tscn, .tres, .import
+# Find all relevant files: .tscn, .tres
 while IFS= read -r -d '' file; do
     strip_uids "$file"
-done < <(find "$PROJECT_PATH" \( -name "*.tscn" -o -name "*.tres" -o -name "*.import" \) -type f -print0 2>/dev/null)
+done < <(find "$PROJECT_PATH" \( -name "*.tscn" -o -name "*.tres" \) -type f -print0 2>/dev/null)
 
 # Pass 3: Warn about UID refs in scripts
 WARNINGS=0
