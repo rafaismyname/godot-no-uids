@@ -88,6 +88,10 @@ jobs:
             libxinerama-dev libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev \
             libudev-dev libxi-dev libxrandr-dev libwayland-dev
 
+      - name: Install D3D12 SDK (required for Windows build)
+        if: matrix.platform == 'windows'
+        run: python misc/scripts/install_d3d12_sdk_windows.py
+
       - name: Apply No-UID Patch
         shell: bash
         run: |
