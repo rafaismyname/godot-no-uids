@@ -88,9 +88,16 @@ jobs:
             libxinerama-dev libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev \
             libudev-dev libxi-dev libxrandr-dev libwayland-dev
 
-      - name: Install D3D12 SDK (required for Windows build)
+      - name: Install Windows Build Dependencies (D3D12 + AccessKit)
         if: matrix.platform == 'windows'
-        run: python misc/scripts/install_d3d12_sdk_windows.py
+        # Must run in bash so it matches the build step's shell. Godot's deps
+        # path resolution keys off MSYSTEM (set by Git Bash but not PowerShell),
+        # so installing here under bash lands the SDKs in the same build_deps
+        # directory the bash-run scons build later looks in.
+        shell: bash
+        run: |
+          python misc/scripts/install_d3d12_sdk_windows.py
+          python misc/scripts/install_accesskit.py
 
       - name: Apply No-UID Patch
         shell: bash
