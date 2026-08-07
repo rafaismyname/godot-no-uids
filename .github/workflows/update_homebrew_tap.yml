@@ -1,0 +1,114 @@
+name: Update Homebrew Tap
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to (re-)sync to the tap, e.g. 4.7.1-stable-nouid. Defaults to the latest release.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-homebrew-tap
+  cancel-in-progress: false
+
+jobs:
+  update-tap:
+    if: github.event_name == 'workflow_dispatch' || (github.event.release.draft == false && github.event.release.prerelease == false)
+    runs-on: macos-latest
+    steps:
+      - name: Resolve release tag and version
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          elif [ -n "$EVENT_TAG" ]; then
+            TAG="$EVENT_TAG"
+          else
+            TAG=$(gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName)
+          fi
+
+          VERSION="${TAG%-nouid}"
+          VERSION="${VERSION%-stable}"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch release asset checksums
+        id: sha
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          ASSETS_JSON=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq '.assets')
+
+          SHA_MACOS=$(echo "$ASSETS_JSON" | jq -r '.[] | select(.name == "godot.macos.editor.zip") | .digest' | sed 's/^sha256://')
+          SHA_LINUX=$(echo "$ASSETS_JSON" | jq -r '.[] | select(.name | endswith("-Linux")) | .digest' | sed 's/^sha256://')
+
+          if [ -z "$SHA_MACOS" ] || [ -z "$SHA_LINUX" ]; then
+            echo "::error::Could not find expected macOS/Linux release assets for tag $TAG"
+            exit 1
+          fi
+
+          echo "sha_macos=$SHA_MACOS" >> "$GITHUB_OUTPUT"
+          echo "sha_linux=$SHA_LINUX" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: rafaismyname/homebrew-godot-no-uids
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Generate cask/formula files
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          SHA_MACOS: ${{ steps.sha.outputs.sha_macos }}
+          SHA_LINUX: ${{ steps.sha.outputs.sha_linux }}
+        run: |
+          cd tap
+          ruby scripts/generate.rb \
+            --version "$VERSION" \
+            --tag "$TAG" \
+            --sha-macos "$SHA_MACOS" \
+            --sha-linux "$SHA_LINUX"
+
+      - name: Validate with brew style/audit
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          brew tap rafaismyname/godot-no-uids "$PWD/tap"
+          cd tap
+          brew style Casks/ Formula/
+          brew audit --cask "rafaismyname/godot-no-uids/godot-no-uids"
+          brew audit --cask "rafaismyname/godot-no-uids/godot-no-uids@$VERSION"
+          brew audit --formula "rafaismyname/godot-no-uids/godot-no-uids"
+          brew audit --formula "rafaismyname/godot-no-uids/godot-no-uids@$VERSION"
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks Formula
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update to $VERSION"
+          git pull --rebase origin master
+          git push origin master
