@@ -207,3 +207,11 @@ jobs:
           files: |
             godot-*
             *.zip
+
+  update-tap:
+    needs: [check-version, release]
+    uses: ./.github/workflows/update_homebrew_tap.yml
+    with:
+      tag: ${{ needs.check-version.outputs.version }}-nouid
+    secrets:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

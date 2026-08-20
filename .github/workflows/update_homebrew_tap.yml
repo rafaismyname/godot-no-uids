@@ -1,12 +1,27 @@
 name: Update Homebrew Tap
 
 on:
+  # Called directly by the build workflows once they publish a release.
+  # This is the path that actually runs for automated builds: releases created
+  # with the default GITHUB_TOKEN do NOT emit a `release` event, so relying on
+  # the trigger below alone would silently never fire.
+  # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag to sync to the tap, e.g. 4.7.2-stable-nouid.'
+        required: true
+        type: string
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        required: true
+  # Covers releases published by a human through the GitHub UI.
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to (re-)sync to the tap, e.g. 4.7.1-stable-nouid. Defaults to the latest release.'
+        description: 'Release tag to (re-)sync to the tap, e.g. 4.7.2-stable-nouid. Defaults to the latest release.'
         required: false
         type: string
 
@@ -19,7 +34,10 @@ concurrency:
 
 jobs:
   update-tap:
-    if: github.event_name == 'workflow_dispatch' || (github.event.release.draft == false && github.event.release.prerelease == false)
+    # Only the `release` trigger can carry a draft/prerelease; for workflow_call
+    # and workflow_dispatch, github.event_name is the caller's event, so this
+    # filter must not gate those paths.
+    if: github.event_name != 'release' || (github.event.release.draft == false && github.event.release.prerelease == false)
     runs-on: macos-latest
     steps:
       - name: Resolve release tag and version
@@ -69,6 +87,19 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
 
+      # Move the checkout into Homebrew's Taps directory so brew audits the
+      # actual working tree. `brew tap <name> <path>` git-clones instead, which
+      # only carries committed files -- the newly generated cask/formula for the
+      # release being synced would be invisible, so validation would silently
+      # only ever check versions that were already published.
+      - name: Install tap into Homebrew
+        run: |
+          TAP_PATH="$(brew --repository)/Library/Taps/rafaismyname/homebrew-godot-no-uids"
+          mkdir -p "$(dirname "$TAP_PATH")"
+          rm -rf "$TAP_PATH"
+          mv "$GITHUB_WORKSPACE/tap" "$TAP_PATH"
+          echo "TAP_PATH=$TAP_PATH" >> "$GITHUB_ENV"
+
       - name: Generate cask/formula files
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
@@ -76,7 +107,7 @@ jobs:
           SHA_MACOS: ${{ steps.sha.outputs.sha_macos }}
           SHA_LINUX: ${{ steps.sha.outputs.sha_linux }}
         run: |
-          cd tap
+          cd "$TAP_PATH"
           ruby scripts/generate.rb \
             --version "$VERSION" \
             --tag "$TAG" \
@@ -87,8 +118,7 @@ jobs:
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
         run: |
-          brew tap rafaismyname/godot-no-uids "$PWD/tap"
-          cd tap
+          cd "$TAP_PATH"
           brew style Casks/ Formula/
           brew audit --cask "rafaismyname/godot-no-uids/godot-no-uids"
           brew audit --cask "rafaismyname/godot-no-uids/godot-no-uids@$VERSION"
@@ -99,7 +129,7 @@ jobs:
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
         run: |
-          cd tap
+          cd "$TAP_PATH"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks Formula
