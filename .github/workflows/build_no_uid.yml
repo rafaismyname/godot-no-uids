@@ -15,8 +15,7 @@ jobs:
       should_build: ${{ steps.check.outputs.should_build }}
       version: ${{ steps.check.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      
+      # No checkout needed: this job only queries the GitHub API over curl.
       - name: Check Upstream Version
         id: check
         run: |
