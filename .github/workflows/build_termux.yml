@@ -1,0 +1,48 @@
+name: Build Godot No-UID (Termux)
+
+# Reusable: called by build_no_uid.yml and manual_build.yml. Can also be run
+# on its own to produce a Termux binary as a workflow artifact.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Godot version tag (e.g., 4.7.2-stable)'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Godot version tag (e.g., 4.7.2-stable)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-termux:
+    # Native arm64 runner: the Termux image is aarch64, so no emulation needed.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    steps:
+      - name: Checkout build scripts
+        uses: actions/checkout@v4
+
+      - name: Build inside Termux
+        run: |
+          mkdir -p out
+          # The container user differs from the runner user, so open up the
+          # output dir instead of trying to match uids.
+          chmod 777 out
+          docker run --rm \
+            -v "$PWD/scripts/build_termux.sh:/build_termux.sh:ro" \
+            -v "$PWD/out:/out" \
+            termux/termux-docker:aarch64 \
+            bash /build_termux.sh "${{ inputs.version }}" /out
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Termux-build
+          path: out/godot-*
+          if-no-files-found: error

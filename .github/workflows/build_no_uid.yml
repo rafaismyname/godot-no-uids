@@ -183,9 +183,19 @@ jobs:
             godot-*
             godot.macos.editor.zip
 
+  # Experimental: native Termux (Android aarch64) build. Not part of the
+  # matrix above, and a failure here must not block the other platforms.
+  build-termux:
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/build_termux.yml
+    with:
+      version: ${{ needs.check-version.outputs.version }}
+
   release:
-    needs: [check-version, build]
-    if: needs.check-version.outputs.should_build == 'true'
+    needs: [check-version, build, build-termux]
+    # Publish as long as the main platform builds succeeded; Termux is optional.
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.check-version.outputs.should_build == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
