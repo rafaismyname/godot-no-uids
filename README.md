@@ -39,21 +39,14 @@ See the [tap repository](https://github.com/rafaismyname/homebrew-godot-no-uids)
 
 ### Android (Termux)
 
-Experimental. The release includes a `godot-<version>-nouid-Termux-aarch64` binary (X11 only, so use it with
-[Termux:X11](https://github.com/termux/termux-x11); no Wayland or OpenXR). It links against Termux's shared
-libraries, so install them first:
+Experimental, X11 only (use [Termux:X11](https://github.com/termux/termux-x11)). One line installs the
+dependencies and the latest release as `godot-nouid`:
 
 ```bash
-pkg install x11-repo
-pkg install brotli ca-certificates fontconfig freetype glu libandroid-execinfo libc++ libenet libgraphite \
-  libjpeg-turbo libogg libtheora libvorbis libvpx libwebp libwslay libxcursor libxi libxinerama libxkbcommon \
-  libxrandr mbedtls miniupnpc opengl opusfile pcre2 pulseaudio sdl3 speechd zlib zstd
-# then download the release asset and:
-install -Dm755 godot-*-nouid-Termux-aarch64 "$PREFIX/bin/godot-nouid"
+pkg install -y x11-repo && pkg install -y brotli ca-certificates fontconfig freetype glu libandroid-execinfo libc++ libenet libgraphite libjpeg-turbo libogg libtheora libvorbis libvpx libwebp libwslay libxcursor libxi libxinerama libxkbcommon libxrandr mbedtls miniupnpc opengl opusfile pcre2 pulseaudio sdl3 speechd zlib zstd curl && curl -fL "$(curl -fsS https://api.github.com/repos/rafaismyname/godot-no-uids/releases/latest | grep -o 'https://[^"]*Termux-aarch64')" -o $PREFIX/bin/godot-nouid && chmod +x $PREFIX/bin/godot-nouid
 ```
 
-To build it yourself inside Termux (slow: hours on a phone), run
-[`scripts/build_termux.sh`](scripts/build_termux.sh) `[version-tag] [output-dir]`.
+To build it yourself (slow: hours on a phone), run [`scripts/build_termux.sh`](scripts/build_termux.sh) inside Termux.
 
 ### Manual Download
 
